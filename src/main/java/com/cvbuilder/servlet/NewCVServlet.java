@@ -10,30 +10,23 @@ import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 
 /**
- * CONTROLLER - Starts a brand-new CV creation.
+ * SERVLET — NewCVServlet
  *
- * GET /cv/new → clears any CV in progress from session → redirects to step 1
- *
- * Without this, if someone clicks "Create CV" while already having one in progress,
- * they'd continue the old one. This gives them a clean slate.
+ * Efface le CV en cours de session pour démarrer un nouveau proprement.
  */
 @WebServlet("/cv/new")
 public class NewCVServlet extends HttpServlet {
 
     @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response)
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
-        HttpSession session = request.getSession(false);
+        HttpSession session = req.getSession(false);
         if (session == null || session.getAttribute("user") == null) {
-            response.sendRedirect(request.getContextPath() + "/login");
+            resp.sendRedirect(req.getContextPath() + "/login");
             return;
         }
-
-        // Remove the CV in progress from session → clean start
         session.removeAttribute("currentCV");
-
-        // Go to step 1
-        response.sendRedirect(request.getContextPath() + "/cv/step1");
+        resp.sendRedirect(req.getContextPath() + "/cv/step1");
     }
 }

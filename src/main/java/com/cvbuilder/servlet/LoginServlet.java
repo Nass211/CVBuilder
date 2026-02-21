@@ -1,8 +1,8 @@
 package com.cvbuilder.servlet;
 
+import com.cvbuilder.dao.DAOFactory;
 import com.cvbuilder.model.User;
-import com.cvbuilder.util.FileStorage;
-import com.cvbuilder.util.StorageFactory;
+import com.cvbuilder.service.UserService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -13,68 +13,60 @@ import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 
 /**
- * CONTROLLER - Handles Login and Logout.
+ * SERVLET — LoginServlet
  *
- * GET  /login          → shows login form
- * POST /login          → authenticates user, creates session
- * GET  /login?logout=true → destroys session, redirects to login
+ * GET  /login          → affiche le formulaire
+ * POST /login          → appelle UserService.login() → crée session si OK
+ * GET  /login?logout   → invalide la session
  */
 @WebServlet("/login")
 public class LoginServlet extends HttpServlet {
 
     @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response)
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
-        // Handle logout
-        if ("true".equals(request.getParameter("logout"))) {
-            HttpSession session = request.getSession(false);
-            if (session != null) {
-                session.invalidate(); // Destroy the session
-            }
-            response.sendRedirect(request.getContextPath() + "/login?loggedout=true");
+        // Déconnexion
+        if ("true".equals(req.getParameter("logout"))) {
+            HttpSession session = req.getSession(false);
+            if (session != null) session.invalidate();
+            resp.sendRedirect(req.getContextPath() + "/login?loggedout=true");
             return;
         }
 
-        // If user is already logged in, go to dashboard
-        HttpSession session = request.getSession(false);
+        // Déjà connecté → dashboard directement
+        HttpSession session = req.getSession(false);
         if (session != null && session.getAttribute("user") != null) {
-            response.sendRedirect(request.getContextPath() + "/dashboard");
+            resp.sendRedirect(req.getContextPath() + "/dashboard");
             return;
         }
 
-        // Show login form
-        request.getRequestDispatcher("/WEB-INF/views/login.jsp").forward(request, response);
+        req.getRequestDispatcher("/WEB-INF/views/login.jsp").forward(req, resp);
     }
 
     @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response)
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
-        String username = request.getParameter("username");
-        String password = request.getParameter("password");
+        String username = req.getParameter("username");
+        String password = req.getParameter("password");
 
-        if (username == null || password == null) {
-            request.setAttribute("error", "Veuillez remplir tous les champs.");
-            request.getRequestDispatcher("/WEB-INF/views/login.jsp").forward(request, response);
-            return;
-        }
+        // Appel au Service → qui appelle le DAO
+        UserService userService = new UserService(
+            DAOFactory.getUserDAO(getServletContext())
+        );
 
-        FileStorage storage = StorageFactory.getStorage(getServletContext());
-        User user = storage.authenticate(username.trim(), password);
+        User user = userService.login(username, password);
 
         if (user != null) {
-            // Login success! Create a session and store the user in it
-            HttpSession session = request.getSession(true); // Create new session
-            session.setAttribute("user", user);            // Store user object
-            session.setMaxInactiveInterval(30 * 60);       // Session expires after 30 minutes
-
-            // Redirect to dashboard
-            response.sendRedirect(request.getContextPath() + "/dashboard");
+            // Connexion réussie → créer la session
+            HttpSession session = req.getSession(true);
+            session.setAttribute("user", user);
+            session.setMaxInactiveInterval(30 * 60); // 30 minutes
+            resp.sendRedirect(req.getContextPath() + "/dashboard");
         } else {
-            // Wrong credentials
-            request.setAttribute("error", "Nom d'utilisateur ou mot de passe incorrect.");
-            request.getRequestDispatcher("/WEB-INF/views/login.jsp").forward(request, response);
+            req.setAttribute("error", "Nom d'utilisateur ou mot de passe incorrect.");
+            req.getRequestDispatcher("/WEB-INF/views/login.jsp").forward(req, resp);
         }
     }
 }

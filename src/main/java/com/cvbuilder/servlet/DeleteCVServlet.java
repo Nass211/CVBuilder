@@ -1,9 +1,8 @@
 package com.cvbuilder.servlet;
 
-import com.cvbuilder.model.CV;
+import com.cvbuilder.dao.DAOFactory;
 import com.cvbuilder.model.User;
-import com.cvbuilder.util.FileStorage;
-import com.cvbuilder.util.StorageFactory;
+import com.cvbuilder.service.CVService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -14,37 +13,32 @@ import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 
 /**
- * CONTROLLER - Deletes a CV.
- * POST /cv/delete?id=xxx → deletes file, redirects to dashboard
+ * SERVLET — DeleteCVServlet
+ *
+ * POST → CVService.delete() → vérifie propriété → CVDAO.delete() → supprime le fichier
  */
 @WebServlet("/cv/delete")
 public class DeleteCVServlet extends HttpServlet {
 
     @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response)
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
-        HttpSession session = request.getSession(false);
+        HttpSession session = req.getSession(false);
         if (session == null || session.getAttribute("user") == null) {
-            response.sendRedirect(request.getContextPath() + "/login");
+            resp.sendRedirect(req.getContextPath() + "/login");
             return;
         }
 
-        String cvId = request.getParameter("id");
-        if (cvId == null || cvId.isEmpty()) {
-            response.sendRedirect(request.getContextPath() + "/dashboard");
-            return;
+        String cvId = req.getParameter("id");
+        User user   = (User) session.getAttribute("user");
+
+        if (cvId != null && !cvId.isEmpty()) {
+            // Le Service vérifie la propriété AVANT de supprimer
+            CVService cvService = new CVService(DAOFactory.getCVDAO(getServletContext()));
+            cvService.delete(cvId, user.getUsername());
         }
 
-        FileStorage storage = StorageFactory.getStorage(getServletContext());
-        CV cv = storage.loadCV(cvId);
-        User user = (User) session.getAttribute("user");
-
-        // Only delete if user owns this CV
-        if (cv != null && cv.getOwnerUsername().equals(user.getUsername())) {
-            storage.deleteCV(cvId);
-        }
-
-        response.sendRedirect(request.getContextPath() + "/dashboard");
+        resp.sendRedirect(req.getContextPath() + "/dashboard");
     }
 }

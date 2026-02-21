@@ -1,9 +1,10 @@
 package com.cvbuilder.servlet;
 
+import com.cvbuilder.dao.DAOFactory;
 import com.cvbuilder.model.CV;
 import com.cvbuilder.model.User;
-import com.cvbuilder.util.FileStorage;
-import com.cvbuilder.util.StorageFactory;
+import com.cvbuilder.service.CVService;
+import com.cvbuilder.service.CVService.CVFormParams;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -12,97 +13,86 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 
 import java.io.IOException;
-import java.time.LocalDate;
 
 /**
- * CONTROLLER - Step 1 of CV creation: État Civil (personal info).
+ * SERVLET — Step1Servlet : État Civil
  *
- * GET  /cv/step1          → show the form (new CV)
- * GET  /cv/step1?id=xxx   → show the form (editing existing CV)
- * POST /cv/step1          → save to session + file, go to step 2
+ * Flux DAO :
+ *   Servlet → CVService.saveStep1() → CVDAO.save() → cv_ID.txt
+ *
+ * GET  → affiche le formulaire (avec données si édition)
+ * POST → délègue au CVService → redirige vers step2
  */
 @WebServlet("/cv/step1")
 public class Step1Servlet extends HttpServlet {
 
     @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response)
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
-        // Auth check
-        HttpSession session = requireLogin(request, response);
+        HttpSession session = requireLogin(req, resp);
         if (session == null) return;
 
-        String cvId = request.getParameter("id");
+        String cvId = req.getParameter("id");
 
         if (cvId != null && !cvId.isEmpty()) {
-            // Editing existing CV → load it from file
-            FileStorage storage = StorageFactory.getStorage(getServletContext());
-            CV cv = storage.loadCV(cvId);
+            // Mode édition : charger le CV existant depuis le DAO
+            User user = (User) session.getAttribute("user");
+            CVService cvService = new CVService(DAOFactory.getCVDAO(getServletContext()));
+            CV cv = cvService.findByIdForUser(cvId, user.getUsername());
             if (cv != null) {
-                // Put CV in session so we can build on it across steps
                 session.setAttribute("currentCV", cv);
-                request.setAttribute("cv", cv);
+                req.setAttribute("cv", cv);
             }
         } else {
-            // New CV → check if there's already one in progress in session
+            // Nouveau CV ou en cours → récupérer depuis session
             CV cv = (CV) session.getAttribute("currentCV");
-            if (cv != null) {
-                request.setAttribute("cv", cv);
-            }
+            if (cv != null) req.setAttribute("cv", cv);
         }
 
-        request.getRequestDispatcher("/WEB-INF/views/cv/step1.jsp").forward(request, response);
+        req.getRequestDispatcher("/WEB-INF/views/cv/step1.jsp").forward(req, resp);
     }
 
     @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response)
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
-        // Auth check
-        HttpSession session = requireLogin(request, response);
+        HttpSession session = requireLogin(req, resp);
         if (session == null) return;
 
         User user = (User) session.getAttribute("user");
+        CV existing = (CV) session.getAttribute("currentCV");
 
-        // Get or create CV from session
-        CV cv = (CV) session.getAttribute("currentCV");
-        if (cv == null) {
-            cv = new CV();
-            cv.setOwnerUsername(user.getUsername());
-            cv.setCreatedAt(LocalDate.now().toString());
-        }
+        // Construire le CVFormParams à partir des paramètres HTTP
+        CVFormParams params = new CVFormParams();
+        params.title        = req.getParameter("title");
+        params.nom          = req.getParameter("nom");
+        params.prenom       = req.getParameter("prenom");
+        params.email        = req.getParameter("email");
+        params.telephone    = req.getParameter("telephone");
+        params.adresse      = req.getParameter("adresse");
+        params.ville        = req.getParameter("ville");
+        params.dateNaissance= req.getParameter("dateNaissance");
+        params.nationalite  = req.getParameter("nationalite");
+        params.linkedin     = req.getParameter("linkedin");
+        params.siteWeb      = req.getParameter("siteWeb");
+        params.resume       = req.getParameter("resume");
 
-        // Fill in the personal info from the form
-        cv.setTitle(request.getParameter("title"));
-        cv.setNom(request.getParameter("nom"));
-        cv.setPrenom(request.getParameter("prenom"));
-        cv.setEmail(request.getParameter("email"));
-        cv.setTelephone(request.getParameter("telephone"));
-        cv.setAdresse(request.getParameter("adresse"));
-        cv.setVille(request.getParameter("ville"));
-        cv.setDateNaissance(request.getParameter("dateNaissance"));
-        cv.setNationalite(request.getParameter("nationalite"));
-        cv.setLinkedin(request.getParameter("linkedin"));
-        cv.setSiteWeb(request.getParameter("siteWeb"));
-        cv.setResume(request.getParameter("resume"));
+        // Déléguer au Service (qui appelle le DAO)
+        CVService cvService = new CVService(DAOFactory.getCVDAO(getServletContext()));
+        CV cv = cvService.saveStep1(existing, user.getUsername(), params);
 
-        // Save to session (so next steps can access it)
+        // Mettre le CV à jour dans la session
         session.setAttribute("currentCV", cv);
 
-        // Also save to file (in case user closes browser, data isn't lost)
-        FileStorage storage = StorageFactory.getStorage(getServletContext());
-        storage.saveCV(cv);
-
-        // Go to step 2
-        response.sendRedirect(request.getContextPath() + "/cv/step2");
+        resp.sendRedirect(req.getContextPath() + "/cv/step2");
     }
 
-    // Helper: checks if user is logged in, redirects if not
-    private HttpSession requireLogin(HttpServletRequest request, HttpServletResponse response)
+    private HttpSession requireLogin(HttpServletRequest req, HttpServletResponse resp)
             throws IOException {
-        HttpSession session = request.getSession(false);
+        HttpSession session = req.getSession(false);
         if (session == null || session.getAttribute("user") == null) {
-            response.sendRedirect(request.getContextPath() + "/login");
+            resp.sendRedirect(req.getContextPath() + "/login");
             return null;
         }
         return session;

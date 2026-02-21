@@ -15,7 +15,7 @@
     <!-- Data storage directory - change this to your preferred path -->
     <context-param>
         <param-name>dataDir</param-name>
-        <param-value>/home/bilal/cvbuilder-data</param-value>
+        <param-value>/tmp/cvbuilder-data</param-value>
     </context-param>
 
 </web-app>

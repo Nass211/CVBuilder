@@ -1,9 +1,9 @@
 package com.cvbuilder.servlet;
 
+import com.cvbuilder.dao.DAOFactory;
 import com.cvbuilder.model.CV;
 import com.cvbuilder.model.User;
-import com.cvbuilder.util.FileStorage;
-import com.cvbuilder.util.StorageFactory;
+import com.cvbuilder.service.CVService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -15,40 +15,34 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * CONTROLLER - Dashboard page.
+ * SERVLET — DashboardServlet
  *
- * GET /dashboard → shows all CVs for the logged-in user
- *
- * This servlet checks if the user is logged in (via session).
- * If not, it redirects to login. This is called "authentication check".
+ * Charge tous les CVs de l'utilisateur connecté via CVService → CVDAO.
  */
 @WebServlet("/dashboard")
 public class DashboardServlet extends HttpServlet {
 
     @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response)
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
-        // 1. Check if user is logged in
-        HttpSession session = request.getSession(false);
+        HttpSession session = req.getSession(false);
         if (session == null || session.getAttribute("user") == null) {
-            // Not logged in → send to login page
-            response.sendRedirect(request.getContextPath() + "/login");
+            resp.sendRedirect(req.getContextPath() + "/login");
             return;
         }
 
-        // 2. Get the logged-in user from session
         User user = (User) session.getAttribute("user");
 
-        // 3. Load all their CVs from files
-        FileStorage storage = StorageFactory.getStorage(getServletContext());
-        List<CV> userCVs = storage.getCVsForUser(user.getUsername());
+        // Le Service récupère les CVs via le DAO
+        CVService cvService = new CVService(
+            DAOFactory.getCVDAO(getServletContext())
+        );
 
-        // 4. Put CVs into request so JSP can access them
-        request.setAttribute("cvList", userCVs);
-        request.setAttribute("cvCount", userCVs.size());
+        List<CV> cvList = cvService.getAllForUser(user.getUsername());
 
-        // 5. Forward to dashboard view
-        request.getRequestDispatcher("/WEB-INF/views/dashboard.jsp").forward(request, response);
+        req.setAttribute("cvList",  cvList);
+        req.setAttribute("cvCount", cvList.size());
+        req.getRequestDispatcher("/WEB-INF/views/dashboard.jsp").forward(req, resp);
     }
 }

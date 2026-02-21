@@ -1,8 +1,8 @@
 package com.cvbuilder.servlet;
 
+import com.cvbuilder.dao.DAOFactory;
 import com.cvbuilder.model.CV;
-import com.cvbuilder.util.FileStorage;
-import com.cvbuilder.util.StorageFactory;
+import com.cvbuilder.service.CVService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -13,70 +13,60 @@ import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 
 /**
- * CONTROLLER - Template selection page.
+ * SERVLET — TemplateServlet
  *
- * GET  /cv/template → show 3 template previews to pick from
- * POST /cv/template → save template choice, show final CV
+ * POST → CVService.saveTemplate() → CVDAO.save() → cv_ID.txt
  */
 @WebServlet("/cv/template")
 public class TemplateServlet extends HttpServlet {
 
     @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response)
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
-        HttpSession session = requireLogin(request, response);
+        HttpSession session = requireLogin(req, resp);
         if (session == null) return;
 
         CV cv = (CV) session.getAttribute("currentCV");
         if (cv == null) {
-            response.sendRedirect(request.getContextPath() + "/cv/step1");
+            resp.sendRedirect(req.getContextPath() + "/cv/step1");
             return;
         }
 
-        request.setAttribute("cv", cv);
-        request.getRequestDispatcher("/WEB-INF/views/cv/template.jsp").forward(request, response);
+        req.setAttribute("cv", cv);
+        req.getRequestDispatcher("/WEB-INF/views/cv/template.jsp").forward(req, resp);
     }
 
     @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response)
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
-        HttpSession session = requireLogin(request, response);
+        HttpSession session = requireLogin(req, resp);
         if (session == null) return;
 
         CV cv = (CV) session.getAttribute("currentCV");
         if (cv == null) {
-            response.sendRedirect(request.getContextPath() + "/cv/step1");
+            resp.sendRedirect(req.getContextPath() + "/cv/step1");
             return;
         }
 
-        // Save template choice (1, 2, or 3)
-        String templateParam = request.getParameter("template");
         int template = 1;
         try {
-            template = Integer.parseInt(templateParam);
-            if (template < 1 || template > 3) template = 1;
-        } catch (NumberFormatException e) {
-            template = 1;
-        }
+            template = Integer.parseInt(req.getParameter("template"));
+        } catch (NumberFormatException ignored) {}
 
-        cv.setTemplateChoice(template);
+        CVService cvService = new CVService(DAOFactory.getCVDAO(getServletContext()));
+        cv = cvService.saveTemplate(cv, template);
+
         session.setAttribute("currentCV", cv);
-
-        // Save final CV to file
-        FileStorage storage = StorageFactory.getStorage(getServletContext());
-        storage.saveCV(cv);
-
-        // Go to view/preview page
-        response.sendRedirect(request.getContextPath() + "/cv/view?id=" + cv.getId());
+        resp.sendRedirect(req.getContextPath() + "/cv/view?id=" + cv.getId());
     }
 
-    private HttpSession requireLogin(HttpServletRequest request, HttpServletResponse response)
+    private HttpSession requireLogin(HttpServletRequest req, HttpServletResponse resp)
             throws IOException {
-        HttpSession session = request.getSession(false);
+        HttpSession session = req.getSession(false);
         if (session == null || session.getAttribute("user") == null) {
-            response.sendRedirect(request.getContextPath() + "/login");
+            resp.sendRedirect(req.getContextPath() + "/login");
             return null;
         }
         return session;
